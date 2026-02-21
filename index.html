@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CivicShield – Governance Continuity & Self-Healing API</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #03070b;
+            --panel-bg: rgba(10, 20, 30, 0.6);
+            --panel-border: rgba(0, 255, 136, 0.15);
+            --text-main: #e2e8f0;
+            --text-muted: #64748b;
+            --neon-green: #00ff88;
+            --alert-red: #ff3366;
+            --alert-orange: #ffaa00;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            transition: box-shadow 0.3s ease;
+        }
+
+        body.emergency-mode {
+            animation: borderPulse 1.5s infinite;
+            box-shadow: inset 0 0 50px rgba(255, 51, 102, 0.8);
+        }
+
+        @keyframes borderPulse {
+            0% { box-shadow: inset 0 0 20px rgba(255, 51, 102, 0.5); }
+            50% { box-shadow: inset 0 0 80px rgba(255, 51, 102, 0.9); }
+            100% { box-shadow: inset 0 0 20px rgba(255, 51, 102, 0.5); }
+        }
+
+        @keyframes flashRed {
+            0% { color: var(--alert-red); text-shadow: 0 0 10px var(--alert-red); }
+            50% { color: #8a1a35; text-shadow: none; }
+            100% { color: var(--alert-red); text-shadow: 0 0 10px var(--alert-red); }
+        }
+
+        @keyframes glowGreen {
+            0% { text-shadow: 0 0 5px var(--neon-green); }
+            50% { text-shadow: 0 0 20px var(--neon-green); }
+            100% { text-shadow: 0 0 5px var(--neon-green); }
+        }
+
+        header {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(180deg, rgba(0, 255, 136, 0.05) 0%, transparent 100%);
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        h1 {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 2rem;
+            color: var(--neon-green);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+
+        h2 {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 400;
+            letter-spacing: 1px;
+        }
+
+        .container {
+            flex: 1;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-green), transparent);
+            opacity: 0.3;
+        }
+
+        .panel-title {
+            font-family: 'Share Tech Mono', monospace;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .top-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-box {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 15px;
+        }
+
+        .stat-value {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 2rem;
+            margin-top: 5px;
+        }
+
+        .color-green { color: var(--neon-green); text-shadow: 0 0 10px rgba(0, 255, 136, 0.5); }
+        .color-orange { color: var(--alert-orange); text-shadow: 0 0 10px rgba(255, 170, 0, 0.5); }
+        .color-red { color: var(--alert-red); text-shadow: 0 0 10px rgba(255, 51, 102, 0.5); }
+        .flashing { animation: flashRed 1s infinite; }
+        .active-badge { animation: glowGreen 2s infinite; color: var(--neon-green); }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label { color: var(--text-muted); }
+        .metric-val { font-size: 1.2rem; }
+
+        .chart-container {
+            position: relative;
+            height: 200px;
+            width: 100%;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--neon-green);
+            border: 1px solid var(--neon-green);
+            padding: 10px 20px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        button:hover:not(:disabled) {
+            background: var(--neon-green);
+            color: #000;
+            box-shadow: 0 0 15px var(--neon-green);
+        }
+
+        button.btn-danger {
+            background: rgba(255, 51, 102, 0.1);
+            color: var(--alert-red);
+            border-color: var(--alert-red);
+        }
+
+        button.btn-danger:hover:not(:disabled) {
+            background: var(--alert-red);
+            color: #000;
+            box-shadow: 0 0 15px var(--alert-red);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: var(--text-muted);
+            color: var(--text-muted);
+        }
+
+        .log-container {
+            height: 250px;
+            overflow-y: auto;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .log-container::-webkit-scrollbar { width: 8px; }
+        .log-container::-webkit-scrollbar-track { background: transparent; }
+        .log-container::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 4px; }
+
+        .log-entry {
+            display: grid;
+            grid-template-columns: 100px 80px 1fr;
+            gap: 15px;
+            padding: 4px 0;
+            border-bottom: 1px dashed rgba(255,255,255,0.05);
+        }
+
+        .log-entry.status-200 .log-status { color: var(--neon-green); }
+        .log-entry.status-429 .log-status { color: var(--alert-orange); }
+        .log-entry.status-500 .log-status, .log-entry.status-503 .log-status { color: var(--alert-red); }
+
+        .sim-results {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 10px;
+        }
+
+        @media (max-width: 900px) {
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Governance Continuity Layer</h1>
+        <h2>Ensuring citizen services remain operational under digital stress.</h2>
+    </header>
+
+    <div class="container">
+        <div class="top-bar">
+            <div class="glass-panel stat-box">
+                <div class="panel-title">System Status</div>
+                <div id="connection-status" class="stat-value active-badge">CIVICSHIELD ACTIVE</div>
+                <div id="last-updated" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 5px;">Awaiting telemetry...</div>
+            </div>
+            <div class="glass-panel stat-box">
+                <div class="panel-title">System Risk Level</div>
+                <div id="risk-level" class="stat-value color-green">LOW</div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="glass-panel">
+                <div class="panel-title">System Section <span>[ NODE CORE ]</span></div>
+                <div class="metric-row">
+                    <span class="metric-label">Active Requests</span>
+                    <span id="sys-active-req" class="metric-val color-green">0</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Heap Usage</span>
+                    <span id="sys-heap" class="metric-val color-green">0%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Event Loop Lag (P99)</span>
+                    <span id="sys-loop-lag" class="metric-val color-green">0 ms</span>
+                </div>
+            </div>
+
+            <div class="glass-panel">
+                <div class="panel-title">Engine Section <span>[ TRAFFIC CONTROLLER ]</span></div>
+                <div class="metric-row">
+                    <span class="metric-label">Current RPS</span>
+                    <span id="eng-rps" class="metric-val color-green">0</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Engine Mode</span>
+                    <span id="eng-mode" class="metric-val color-green">NORMAL</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Circuit Breaker</span>
+                    <span id="eng-cb" class="metric-val color-green">HEALTHY</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Queue Size</span>
+                    <span id="eng-queue" class="metric-val color-green">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="glass-panel">
+                <div class="panel-title">Real-Time Traffic (RPS)</div>
+                <div class="chart-container">
+                    <canvas id="rpsChart"></canvas>
+                </div>
+            </div>
+            <div class="glass-panel">
+                <div class="panel-title">Event Loop Lag (ms)</div>
+                <div class="chart-container">
+                    <canvas id="lagChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="glass-panel">
+                <div class="panel-title">Traffic Simulation Panel <span>[ INJECTOR ]</span></div>
+                <div class="btn-group">
+                    <button id="btn-200" onclick="simulateTraffic(200)">Simulate 200 Req</button>
+                    <button id="btn-1000" onclick="simulateTraffic(1000)">Simulate 1k Req</button>
+                    <button id="btn-3000" class="btn-danger" onclick="simulateTraffic(3000)">Emergency Burst (3k)</button>
+                </div>
+                <div id="sim-status" class="sim-results">System idle. Ready for injection.</div>
+            </div>
+
+            <div class="glass-panel">
+                <div class="panel-title">Live Log Console <span>[ LATEST 20 ]</span></div>
+                <div id="log-console" class="log-container">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Constants
+        const API_METRICS_URL = 'https://ub-1073-production.up.railway.app/metrics';
+        const API_HEALTH_URL = 'https://ub-1073-production.up.railway.app/health';
+        const HEADER_KEY = 'DEMO_KEY';
+        const MAX_HISTORY = 15; // 30 seconds at 2s intervals
+        const MAX_LOGS = 20;
+
+        // State
+        let rpsHistory = Array(MAX_HISTORY).fill(0);
+        let lagHistory = Array(MAX_HISTORY).fill(0);
+        let labels = Array(MAX_HISTORY).fill('');
+        let logs = [];
+
+        // Chart.js Setup
+        Chart.defaults.color = '#64748b';
+        Chart.defaults.font.family = "'Share Tech Mono', monospace";
+        
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 500, easing: 'linear' },
+            scales: {
+                x: { display: false },
+                y: { 
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    border: { display: false }
+                }
+            },
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            elements: { point: { radius: 0 }, line: { tension: 0.4, borderWidth: 2 } }
+        };
+
+        const ctxRps = document.getElementById('rpsChart').getContext('2d');
+        const rpsChart = new Chart(ctxRps, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: rpsHistory,
+                    borderColor: '#00ff88',
+                    backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                    fill: true
+                }]
+            },
+            options: chartOptions
+        });
+
+        const ctxLag = document.getElementById('lagChart').getContext('2d');
+        const lagChart = new Chart(ctxLag, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: lagHistory,
+                    borderColor: '#ffaa00',
+                    backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                    fill: true
+                }]
+            },
+            options: chartOptions
+        });
+
+        // Helper: Format Time
+        function getTimestamp() {
+            const now = new Date();
+            return now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+        }
+
+        // Helper: Color logic
+        function getColorClass(value, thresholds, reverse = false) {
+            let color = 'color-green';
+            if (value >= thresholds[1]) color = reverse ? 'color-green' : 'color-red flashing';
+            else if (value >= thresholds[0]) color = 'color-orange';
+            return color;
+        }
+
+        function getCircuitBreakerClass(status) {
+            if (status === 'HEALTHY') return 'color-green';
+            if (status === 'HALF_OPEN') return 'color-orange';
+            return 'color-red flashing';
+        }
+
+        function getEngineModeClass(mode) {
+            if (mode === 'NORMAL') return 'color-green';
+            if (mode === 'ELEVATED' || mode === 'SURGE') return 'color-orange';
+            return 'color-red flashing';
+        }
+
+        // Fetch Metrics
+        async function updateDashboard() {
+            try {
+                const response = await fetch(API_METRICS_URL, {
+                    headers: { 'x-metrics-key': HEADER_KEY }
+                });
+
+                if (!response.ok) throw new Error('Network error');
+                
+                const data = await response.json();
+                
+                // Connection Status
+                const connEl = document.getElementById('connection-status');
+                connEl.innerText = 'CIVICSHIELD ACTIVE';
+                connEl.className = 'stat-value active-badge';
+                document.getElementById('last-updated').innerText = `Last update: ${getTimestamp()}`;
+
+                // Parse standard or nested structure
+                const activeReq = data.activeRequests ?? data.system?.activeRequests ?? 0;
+                const heapUsage = data.heapUsagePercentage ?? data.system?.heapUsagePercentage ?? 0;
+                const eventLag = data.eventLoopLagP99 ?? data.system?.eventLoopLagP99 ?? 0;
+                const rps = data.currentRPS ?? data.engine?.currentRequestsPerSecond ?? data.requestsPerSecond ?? 0;
+                const engineMode = data.engineMode ?? data.engine?.engineMode ?? 'NORMAL';
+                const cbStatus = data.circuitBreakerStatus ?? data.engine?.circuitBreakerStatus ?? 'HEALTHY';
+                const queueSize = data.queueSize ?? data.engine?.queueSize ?? 0;
+
+                // Update System DOM
+                document.getElementById('sys-active-req').innerText = activeReq;
+                document.getElementById('sys-heap').innerText = `${heapUsage.toFixed(1)}%`;
+                document.getElementById('sys-heap').className = `metric-val ${getColorClass(heapUsage, [75, 90])}`;
+                document.getElementById('sys-loop-lag').innerText = `${eventLag.toFixed(1)} ms`;
+                document.getElementById('sys-loop-lag').className = `metric-val ${getColorClass(eventLag, [50, 150])}`;
+
+                // Update Engine DOM
+                document.getElementById('eng-rps').innerText = rps;
+                document.getElementById('eng-rps').className = `metric-val ${getColorClass(rps, [800, 2000])}`;
+                document.getElementById('eng-mode').innerText = engineMode;
+                document.getElementById('eng-mode').className = `metric-val ${getEngineModeClass(engineMode)}`;
+                document.getElementById('eng-cb').innerText = cbStatus;
+                document.getElementById('eng-cb').className = `metric-val ${getCircuitBreakerClass(cbStatus)}`;
+                document.getElementById('eng-queue').innerText = queueSize;
+                document.getElementById('eng-queue').className = `metric-val ${getColorClass(queueSize, [100, 500])}`;
+
+                // Emergency Border Pulse
+                if (engineMode === 'EMERGENCY' || engineMode === 'CRITICAL') {
+                    document.body.classList.add('emergency-mode');
+                } else {
+                    document.body.classList.remove('emergency-mode');
+                }
+
+             // Calculate Risk Level
+                const riskEl = document.getElementById('risk-level');
+                if (rps > 2000 || queueSize > 1000 || engineMode === 'EMERGENCY' || cbStatus === 'DEGRADED') {
+                    riskEl.innerText = 'CRITICAL';
+                    riskEl.className = 'stat-value color-red flashing';
+                } else if (rps > 1000 || queueSize > 300) {
+                    riskEl.innerText = 'HIGH';
+                    riskEl.className = 'stat-value color-orange';
+                } else if (rps > 500 || queueSize > 50) {
+                    riskEl.innerText = 'MODERATE';
+                    riskEl.className = 'stat-value color-orange';
+                } else {
+                    riskEl.innerText = 'LOW';
+                    riskEl.className = 'stat-value color-green';
+                }
+
+                // Update Charts
+                rpsHistory.push(rps);
+                rpsHistory.shift();
+                lagHistory.push(eventLag);
+                lagHistory.shift();
+
+                rpsChart.update();
+                lagChart.update();
+
+            } catch (error) {
+                const connEl = document.getElementById('connection-status');
+                connEl.innerText = 'DISCONNECTED FROM CONTROL PLANE';
+                connEl.className = 'stat-value color-red flashing';
+                document.body.classList.remove('emergency-mode');
+            }
+        }
+
+        // Live Logs
+        function addLog(status, latencyMs) {
+            logs.unshift({ time: getTimestamp(), status, latency: latencyMs });
+            if (logs.length > MAX_LOGS) logs.pop();
+        }
+
+        function renderLogs() {
+            const container = document.getElementById('log-console');
+            container.innerHTML = logs.map(log => {
+                let statusClass = 'status-200';
+                if (log.status === 429) statusClass = 'status-429';
+                else if (log.status >= 500) statusClass = 'status-500';
+                
+                return `
+                    <div class="log-entry ${statusClass}">
+                        <span>[${log.time}]</span>
+                        <span class="log-status">HTTP ${log.status}</span>
+                        <span>${log.latency}ms</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Traffic Simulation
+        async function simulateTraffic(count) {
+            const btns = document.querySelectorAll('button');
+            btns.forEach(b => b.disabled = true);
+            document.getElementById('sim-status').innerText = `Injecting ${count} parallel requests...`;
+
+            let success = 0;
+            let failed = 0;
+            const promises = [];
+
+            for (let i = 0; i < count; i++) {
+                const start = Date.now();
+                promises.push(
+                    fetch(API_HEALTH_URL)
+                        .then(res => {
+                            const lat = Date.now() - start;
+                            if (res.ok) success++; else failed++;
+                            // Only add a fraction of logs to UI if burst is huge to prevent browser freeze
+                            if (count <= 1000 || Math.random() < 0.05) {
+                                addLog(res.status, lat);
+                            }
+                        })
+                        .catch(err => {
+                            failed++;
+                            if (count <= 1000 || Math.random() < 0.05) {
+                                addLog(503, Date.now() - start);
+                            }
+                        })
+                );
+            }
+
+            // Await all parallel requests
+            await Promise.all(promises);
+            renderLogs(); // Update DOM once after batch to save CPU
+
+            document.getElementById('sim-status').innerText = `Simulation complete: ${success} Succeeded | ${failed} Failed/Dropped`;
+            btns.forEach(b => b.disabled = false);
+        }
+
+        // Init Loop
+        setInterval(updateDashboard, 2000);
+        setInterval(renderLogs, 1000); // Decouple log rendering from network speed
+        updateDashboard(); // Initial fetch
+    </script>
+</body>
+</html>
