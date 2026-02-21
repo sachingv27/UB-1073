@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -102,6 +102,7 @@
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
             position: relative;
             overflow: hidden;
+            transition: all 0.3s ease;
         }
 
         .glass-panel::before {
@@ -148,6 +149,7 @@
         .color-green { color: var(--neon-green); text-shadow: 0 0 10px rgba(0, 255, 136, 0.5); }
         .color-orange { color: var(--alert-orange); text-shadow: 0 0 10px rgba(255, 170, 0, 0.5); }
         .color-red { color: var(--alert-red); text-shadow: 0 0 10px rgba(255, 51, 102, 0.5); }
+        .color-main { color: var(--text-main); }
         .flashing { animation: flashRed 1s infinite; }
         .active-badge { animation: glowGreen 2s infinite; color: var(--neon-green); }
 
@@ -224,6 +226,7 @@
             cursor: not-allowed;
             border-color: var(--text-muted);
             color: var(--text-muted);
+            box-shadow: none;
         }
 
         .log-container {
@@ -260,8 +263,75 @@
             margin-top: 10px;
         }
 
+        /* Upgraded Injection Panel Styles */
+        .progress-bar-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin-bottom: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--neon-green);
+            box-shadow: 0 0 10px var(--neon-green);
+            transition: width 0.1s linear;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 10px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-item .metric-label {
+            font-size: 0.7rem;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+        }
+
+        .warning-badge {
+            text-align: center;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            background: rgba(255, 170, 0, 0.1);
+            border: 1px solid var(--alert-orange);
+            padding: 6px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3), inset 0 0 5px rgba(0, 255, 136, 0.0); border-color: var(--panel-border); }
+            50% { box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3), inset 0 0 40px rgba(0, 255, 136, 0.3); border-color: rgba(0, 255, 136, 0.5); }
+            100% { box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3), inset 0 0 5px rgba(0, 255, 136, 0.0); border-color: var(--panel-border); }
+        }
+
+        .panel-pulse {
+            animation: pulseGlow 1.5s infinite !important;
+        }
+
         @media (max-width: 900px) {
             .grid-2 { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -339,13 +409,36 @@
         </div>
 
         <div class="grid-2">
-            <div class="glass-panel">
+            
+            <div class="glass-panel" id="simulation-panel">
                 <div class="panel-title">Traffic Simulation Panel <span>[ INJECTOR ]</span></div>
+                
                 <div class="btn-group">
-                    <button id="btn-200" onclick="simulateTraffic(200)">Simulate 200 Req</button>
-                    <button id="btn-1000" onclick="simulateTraffic(1000)">Simulate 1k Req</button>
+                    <button id="btn-200" onclick="simulateTraffic(200)">Simulate 200</button>
+                    <button id="btn-1000" onclick="simulateTraffic(1000)">Simulate 1k</button>
                     <button id="btn-3000" class="btn-danger" onclick="simulateTraffic(3000)">Emergency Burst (3k)</button>
+                    <button id="btn-cancel" onclick="cancelInjection()" style="display:none; border-color: var(--alert-orange); color: var(--alert-orange);">Abort Inject</button>
                 </div>
+
+                <div id="sim-stats-container" style="display: none;">
+                    <div class="progress-bar-container">
+                        <div id="sim-progress-bar" class="progress-bar"></div>
+                    </div>
+                    
+                    <div id="shedding-warning" class="warning-badge color-orange flashing" style="display: none;">
+                        ⚠️ Load Shedding Active
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-item"><span class="metric-label">Queue Depth</span> <span id="stat-pending" class="color-orange">0</span></div>
+                        <div class="stat-item"><span class="metric-label">Client RPS</span> <span id="stat-rps" class="color-green">0</span></div>
+                        <div class="stat-item"><span class="metric-label">Sent</span> <span id="stat-sent" class="color-main">0</span></div>
+                        <div class="stat-item"><span class="metric-label">Completed</span> <span id="stat-completed" class="color-main">0</span></div>
+                        <div class="stat-item"><span class="metric-label">Success</span> <span id="stat-success" class="color-green">0</span></div>
+                        <div class="stat-item"><span class="metric-label">Failed</span> <span id="stat-failed" class="color-red">0</span></div>
+                    </div>
+                </div>
+
                 <div id="sim-status" class="sim-results">System idle. Ready for injection.</div>
             </div>
 
@@ -358,20 +451,34 @@
     </div>
 
     <script>
-        // Constants
+        // --- 1. Constants & Global Configuration ---
         const API_METRICS_URL = 'https://ub-1073-production.up.railway.app/metrics';
-        const API_HEALTH_URL = 'https://ub-1073-production.up.railway.app/health';
+        const API_SIMULATE_URL = 'https://ub-1073-production.up.railway.app/simulate';
         const HEADER_KEY = 'DEMO_KEY';
         const MAX_HISTORY = 15; // 30 seconds at 2s intervals
         const MAX_LOGS = 20;
 
-        // State
+        // --- 2. State Management ---
         let rpsHistory = Array(MAX_HISTORY).fill(0);
         let lagHistory = Array(MAX_HISTORY).fill(0);
         let labels = Array(MAX_HISTORY).fill('');
         let logs = [];
 
-        // Chart.js Setup
+        // Global Injection State
+        let injectionQueue = [];
+        let injectionInterval = null;
+        let uiUpdateInterval = null;
+        let injectionStartTime = 0;
+        let injectionStats = { 
+            total: 0, 
+            sent: 0, 
+            completed: 0, 
+            success: 0, 
+            failed: 0 
+        };
+        
+        let lastFailureRate = 0; // Track client-side failure awareness
+        // --- 3. Chart.js Setup ---
         Chart.defaults.color = '#64748b';
         Chart.defaults.font.family = "'Share Tech Mono', monospace";
         
@@ -421,13 +528,12 @@
             options: chartOptions
         });
 
-        // Helper: Format Time
+        // --- 4. Utilities ---
         function getTimestamp() {
             const now = new Date();
             return now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
         }
 
-        // Helper: Color logic
         function getColorClass(value, thresholds, reverse = false) {
             let color = 'color-green';
             if (value >= thresholds[1]) color = reverse ? 'color-green' : 'color-red flashing';
@@ -447,7 +553,7 @@
             return 'color-red flashing';
         }
 
-        // Fetch Metrics
+        // --- 5. Background Metrics Polling & New Risk Logic ---
         async function updateDashboard() {
             try {
                 const response = await fetch(API_METRICS_URL, {
@@ -464,21 +570,21 @@
                 connEl.className = 'stat-value active-badge';
                 document.getElementById('last-updated').innerText = `Last update: ${getTimestamp()}`;
 
-                // Parse standard or nested structure
+                // Extract correct backend fields (fallback included for stability)
                 const activeReq = data.activeRequests ?? data.system?.activeRequests ?? 0;
-                const heapUsage = data.heapUsagePercentage ?? data.system?.heapUsagePercentage ?? 0;
-                const eventLag = data.eventLoopLagP99 ?? data.system?.eventLoopLagP99 ?? 0;
-                const rps = data.currentRPS ?? data.engine?.currentRequestsPerSecond ?? data.requestsPerSecond ?? 0;
-                const engineMode = data.engineMode ?? data.engine?.engineMode ?? 'NORMAL';
-                const cbStatus = data.circuitBreakerStatus ?? data.engine?.circuitBreakerStatus ?? 'HEALTHY';
-                const queueSize = data.queueSize ?? data.engine?.queueSize ?? 0;
+                const rps = data.engine?.rps || data.currentRPS || 0;
+                const queueSize = data.engine?.queueSize || data.queueSize || 0;
+                const cbStatus = data.engine?.circuitBreakerStatus || data.circuitBreakerStatus || 'HEALTHY';
+                const engineMode = data.engine?.mode || data.engineMode || 'NORMAL';
+                const heapUsage = parseFloat(data.system?.heapUsagePercent || data.system?.heapUsagePercentage || 0);
+                const eventLoopLag = parseFloat(data.system?.eventLoopLagP99Ms || data.system?.eventLoopLagP99 || 0);
 
                 // Update System DOM
                 document.getElementById('sys-active-req').innerText = activeReq;
                 document.getElementById('sys-heap').innerText = `${heapUsage.toFixed(1)}%`;
                 document.getElementById('sys-heap').className = `metric-val ${getColorClass(heapUsage, [75, 90])}`;
-                document.getElementById('sys-loop-lag').innerText = `${eventLag.toFixed(1)} ms`;
-                document.getElementById('sys-loop-lag').className = `metric-val ${getColorClass(eventLag, [50, 150])}`;
+                document.getElementById('sys-loop-lag').innerText = `${eventLoopLag.toFixed(1)} ms`;
+                document.getElementById('sys-loop-lag').className = `metric-val ${getColorClass(eventLoopLag, [50, 150])}`;
 
                 // Update Engine DOM
                 document.getElementById('eng-rps').innerText = rps;
@@ -497,26 +603,50 @@
                     document.body.classList.remove('emergency-mode');
                 }
 
-             // Calculate Risk Level
+                // --- NEW RISK LEVEL CALCULATION LOGIC ---
                 const riskEl = document.getElementById('risk-level');
-                if (rps > 2000 || queueSize > 1000 || engineMode === 'EMERGENCY' || cbStatus === 'DEGRADED') {
-                    riskEl.innerText = 'CRITICAL';
-                    riskEl.className = 'stat-value color-red flashing';
-                } else if (rps > 1000 || queueSize > 300) {
-                    riskEl.innerText = 'HIGH';
-                    riskEl.className = 'stat-value color-orange';
-                } else if (rps > 500 || queueSize > 50) {
-                    riskEl.innerText = 'MODERATE';
-                    riskEl.className = 'stat-value color-orange';
-                } else {
-                    riskEl.innerText = 'LOW';
-                    riskEl.className = 'stat-value color-green';
+
+                if (
+                  cbStatus === 'DEGRADED' ||
+                  engineMode === 'EMERGENCY' ||
+                  lastFailureRate > 0.6 ||
+                  rps > 2000 ||
+                  queueSize > 1000 ||
+                  heapUsage > 90 ||
+                  eventLoopLag > 200
+                ) {
+                  riskEl.innerText = 'CRITICAL';
+                  riskEl.className = 'stat-value color-red flashing';
+                }
+                else if (
+                  engineMode === 'CRITICAL' ||
+                  rps > 1200 ||
+                  queueSize > 400 ||
+                  lastFailureRate > 0.3 ||
+                  heapUsage > 80 ||
+                  eventLoopLag > 120
+                ) {
+                  riskEl.innerText = 'HIGH';
+                  riskEl.className = 'stat-value color-orange';
+                }
+                else if (
+                  rps > 500 ||
+                  queueSize > 100 ||
+                  heapUsage > 70 ||
+                  eventLoopLag > 70
+                ) {
+                  riskEl.innerText = 'MODERATE';
+                  riskEl.className = 'stat-value color-orange';
+                }
+                else {
+                  riskEl.innerText = 'LOW';
+                  riskEl.className = 'stat-value color-green';
                 }
 
                 // Update Charts
-                rpsHistory.push(rps);
+                rpsHistory.push(parseFloat(rps));
                 rpsHistory.shift();
-                lagHistory.push(eventLag);
+                lagHistory.push(parseFloat(eventLoopLag));
                 lagHistory.shift();
 
                 rpsChart.update();
@@ -530,7 +660,7 @@
             }
         }
 
-        // Live Logs
+        // --- 6. Live Logs Component ---
         function addLog(status, latencyMs) {
             logs.unshift({ time: getTimestamp(), status, latency: latencyMs });
             if (logs.length > MAX_LOGS) logs.pop();
@@ -553,49 +683,176 @@
             }).join('');
         }
 
-        // Traffic Simulation
-        async function simulateTraffic(count) {
-            const btns = document.querySelectorAll('button');
-            btns.forEach(b => b.disabled = true);
-            document.getElementById('sim-status').innerText = `Injecting ${count} parallel requests...`;
+        // --- 7. Upgraded Traffic Simulation Engine ---
 
-            let success = 0;
-            let failed = 0;
-            const promises = [];
-
-            for (let i = 0; i < count; i++) {
-                const start = Date.now();
-                promises.push(
-                    fetch(API_HEALTH_URL)
-                        .then(res => {
-                            const lat = Date.now() - start;
-                            if (res.ok) success++; else failed++;
-                            // Only add a fraction of logs to UI if burst is huge to prevent browser freeze
-                            if (count <= 1000 || Math.random() < 0.05) {
-                                addLog(res.status, lat);
-                            }
-                        })
-                        .catch(err => {
-                            failed++;
-                            if (count <= 1000 || Math.random() < 0.05) {
-                                addLog(503, Date.now() - start);
-                            }
-                        })
-                );
+        /**
+         * Executes a single request to the API
+         */
+        async function fireSimulatedRequest() {
+            const startMs = Date.now();
+            try {
+                const response = await fetch(API_SIMULATE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ payloadSize: 100, artificialDelayMs: 10 })
+                });
+                
+                if (response.ok) {
+                    injectionStats.success++;
+                } else {
+                    injectionStats.failed++;
+                }
+                
+                // Log a fraction of requests to keep UI smooth
+                if (Math.random() < 0.05 || injectionStats.total <= 200) {
+                    addLog(response.status, Date.now() - startMs);
+                }
+            } catch (err) {
+                injectionStats.failed++;
+                if (Math.random() < 0.05) addLog(503, Date.now() - startMs);
+            } finally {
+                injectionStats.completed++;
             }
-
-            // Await all parallel requests
-            await Promise.all(promises);
-            renderLogs(); // Update DOM once after batch to save CPU
-
-            document.getElementById('sim-status').innerText = `Simulation complete: ${success} Succeeded | ${failed} Failed/Dropped`;
-            btns.forEach(b => b.disabled = false);
         }
 
-        // Init Loop
-        setInterval(updateDashboard, 2000);
-        setInterval(renderLogs, 1000); // Decouple log rendering from network speed
-        updateDashboard(); // Initial fetch
+        /**
+         * Master Batch Injector (Replaces Promise.all)
+         */
+        function simulateTraffic(count) {
+            // Clean any running jobs before starting a new one
+            if (injectionInterval) clearInterval(injectionInterval);
+            if (uiUpdateInterval) clearInterval(uiUpdateInterval);
+            
+            // Setup tracking variables
+            injectionStats = { total: count, sent: 0, completed: 0, success: 0, failed: 0 };
+            injectionQueue = Array(count).fill(1); // Fill queue with placeholders
+            injectionStartTime = Date.now();
+            lastFailureRate = 0; // Reset failure tracking on new run
+
+            // Lock UI Controls
+            document.querySelectorAll('.btn-group button:not(#btn-cancel)').forEach(b => b.disabled = true);
+            document.getElementById('btn-cancel').style.display = 'inline-block';
+            document.getElementById('sim-stats-container').style.display = 'block';
+            document.getElementById('sim-status').innerText = `Injecting ${count} requests into local queue...`;
+            
+            // 1. Start Batch Processor (40ms ticks)
+            injectionInterval = setInterval(() => {
+                // If there's work in the queue, process a batch
+                if (injectionQueue.length > 0) {
+                    const batchSize = Math.min(50, injectionQueue.length); // Max 50 reqs per tick
+                    const batch = injectionQueue.splice(0, batchSize);
+                    
+                    // Fire requests concurrently without waiting
+                    batch.forEach(() => {
+                        injectionStats.sent++;
+                        fireSimulatedRequest();
+                    });
+                } 
+                // If queue is empty AND all in-flight requests are resolved
+                else if (injectionStats.completed >= injectionStats.total) {
+                    finishInjection();
+                }
+            }, 40);
+
+            // 2. Start UI Synchronization (100ms ticks)
+            uiUpdateInterval = setInterval(updateInjectionUI, 100);
+        }
+
+        /**
+         * Real-Time UI Synchronization
+         */
+        function updateInjectionUI() {
+            const { total, sent, completed, success, failed } = injectionStats;
+            const pending = total - completed; // Items still waiting or in-flight
+            
+            // Calculate real-time Client RPS
+            const elapsedSeconds = (Date.now() - injectionStartTime) / 1000;
+            const currentRPS = elapsedSeconds > 0 ? Math.floor(completed / elapsedSeconds) : 0;
+            
+            // Keep Risk Engine aware of real-time failures dynamically
+            lastFailureRate = total > 0 ? (failed / total) : 0;
+            
+            // Safely Update DOM metrics
+            document.getElementById('stat-pending').innerText = pending;
+            document.getElementById('stat-sent').innerText = sent;
+            document.getElementById('stat-completed').innerText = completed;
+            document.getElementById('stat-success').innerText = success;
+            document.getElementById('stat-failed').innerText = failed;
+            document.getElementById('stat-rps').innerText = currentRPS;
+            
+            // Animate Progress Bar
+            const progressPercent = total > 0 ? (completed / total) * 100 : 0;
+            document.getElementById('sim-progress-bar').style.width = `${progressPercent}%`;
+
+            // Visual State Logic: Panel Pulsing Action
+            const panel = document.getElementById('simulation-panel');
+            if (pending > 0) {
+                panel.classList.add('panel-pulse');
+            } else {
+                panel.classList.remove('panel-pulse');
+            }
+
+            // Visual State Logic: Load Shedding Warning Badge
+            const successRate = success / (completed || 1);
+            const sheddingBadge = document.getElementById('shedding-warning');
+            if (completed > 20 && successRate < 0.70) {
+                sheddingBadge.style.display = 'block';
+            } else {
+                sheddingBadge.style.display = 'none';
+            }
+        }
+
+        /**
+         * Graceful Cancel / Abort Command
+         */
+        function cancelInjection() {
+            // Empty the pending queue to stop new fires
+            injectionQueue = []; 
+            
+            // Lock the total to what was already sent. 
+            // The injectionInterval will wait until in-flight requests resolve.
+            injectionStats.total = injectionStats.sent; 
+            
+            document.getElementById('sim-status').innerText = 'Injection aborted. Waiting for in-flight requests to settle...';
+        }
+
+        /**
+         * Cleanup and Finalize State
+         */
+        function finishInjection() {
+            clearInterval(injectionInterval);
+            injectionInterval = null;
+            
+            // Lock in final failure rate for the risk engine
+            lastFailureRate = injectionStats.total > 0 ? (injectionStats.failed / injectionStats.total) : 0;
+            
+            // Give in-flight metrics an extra slight delay to settle visually
+            setTimeout(() => {
+                clearInterval(uiUpdateInterval);
+                uiUpdateInterval = null;
+                
+                updateInjectionUI(); // Final UI paint
+                
+                // Unlock main controls
+                document.querySelectorAll('.btn-group button:not(#btn-cancel)').forEach(b => b.disabled = false);
+                document.getElementById('btn-cancel').style.display = 'none';
+                
+                // Print final result
+                const statusEl = document.getElementById('sim-status');
+                statusEl.innerText = `Simulation Complete: ${injectionStats.success} Succeeded | ${injectionStats.failed} Failed/Dropped`;
+                
+                // Ensure visual resets
+                document.getElementById('simulation-panel').classList.remove('panel-pulse');
+                renderLogs();
+            }, 500);
+        }
+
+        // --- 8. Initialization & Loops ---
+        setInterval(updateDashboard, 2000); // Poll infrastructure metrics
+        setInterval(renderLogs, 1000); // Decouple visual log rendering
+        updateDashboard(); // Run initial fetch immediately
     </script>
 </body>
 </html>
+
+      
